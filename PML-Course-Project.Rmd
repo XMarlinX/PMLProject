@@ -1,0 +1,173 @@
+---
+title: "Practical Machine Learning Course Project"
+author: "Marlin Thomas"
+date: "`r Sys.Date()`"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+Overview
+The Course Project for Practical Machine Learning addresses a classic problem in machine learning: select the best set of predictors for a set of outcomes.
+The source data set has biometric data (the predictors) describing a workout and single evaluation (the outcome) of the workout by the principal. Coursera provides the training and test data.
+
+<div align="center">The Solution</div>The Solution
+
+After importing and examining the data, variables that are not likely to be predictive are deleted from the data. Also, variables with low information density, such as those with a high perentage of NA's and those with near zero variability, are deleted. Then, the training data are partitioned into training and validation data sets. Three prediction functions are applied to the training data to derive predictive models. These models are then run against the validation set to calculate out of sample error and accuracy. The best model is selected and then applied to the testing data set.
+---
+
+Install & Load Packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+install.packages("tidyverse", repos = "http://cran.us.r-project.org")
+library(tidyverse)
+install.packages("caret", repos = "http://cran.us.r-project.org")
+library(caret)
+install.packages("rpart", repos = "http://cran.us.r-project.org")
+library(rpart)
+install.packages("readr", repos = "http://cran.us.r-project.org")
+library(readr)
+install.packages("randomForest", repos = "http://cran.us.r-project.org")
+library(randomForest)
+install.packages("tree", repos = "http://cran.us.r-project.org")
+library(tree)
+capabilities()
+
+```
+
+
+
+
+Import Training and Test Data
+```{r}
+pml_training <- read_csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", show_col_types = FALSE)
+pml_testing <- read_csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", show_col_types = FALSE)
+##Examine problems encountered
+Problems <- problems(pml_training)
+Problems
+##Eliminate issues by deleting problematic data points
+pml_training <- pml_training[,-c(15,90,91)]
+pml_testing <- pml_testing[, -c(15,90,91)]
+```
+
+View & Examine Training & Testing Sets
+```{r}
+View(pml_training)
+View(pml_testing)
+PML_training_Size <- dim(pml_training)
+print (c ("Training Data Rows & Columns", PML_training_Size))
+PML_testing_Size <- dim(pml_testing) 
+print (c ("Testing Data Rows & Columns", PML_testing_Size))
+
+```
+Remove Variables Irrelevant to Prediction Model
+```{r}
+##Columns 1 - 7 are descriptors but not predictors
+pml_training<- pml_training[, -c (1:7)]
+pml_training_size <- dim (pml_training)
+print ( c ("Rows & Columns Remaining:", pml_training_size))
+```
+Eliminate variables with Low Information Density
+```{r}
+##Select variables with NA's less than 90%
+pml_training <- pml_training[,colMeans(is.na(pml_training)) < .9]
+pml_training_size <- dim (pml_training)
+print ( c ("Rows & Columns Remaining After High NA Variables Removed:", pml_training_size))
+##Remove variables with variance near zero
+NearZero <- nearZeroVar(pml_training)
+print ( c("Size of Near Zero Variables:", NearZero))
+##Since the size of NearZero is 0, the below lines are not executed
+# pml_training <- pml_training[, -NearZero]
+# dim(pml_training)
+
+```
+
+Create Training and Validation Subsets
+```{r}
+##To promote reproducibility
+set.seed(127)
+
+##Partition the Data
+##Select 80% of the data for the training set and 30% for the validation set
+##Since the input data set is large, 80% rather than 70% of the data are selected for thr
+##training set. This should produce a more robust model.
+InTraining<- createDataPartition(y=pml_training$classe, p = 0.8, list = FALSE)
+Training <- pml_training[InTraining,]
+Validation <- pml_training[-InTraining,]
+print ("Size of Training:")
+dim(Training)
+print ("Percentage of Data in Training Set:")
+nrow(Training) / nrow(pml_training) * 100
+Validation <- pml_training [-InTraining,]
+print ("Size of Validation Set:")
+dim(Validation)
+```
+
+
+Set Parameters for train()
+```{r}
+Control <- trainControl(method = "cv", number = 3, verboseIter = F)
+##cv is cross validation
+##number is the number of folds in cross validation
+##verboseIter means the rtraining log is not printed
+Control
+```
+
+
+Decision Tree Using Classification Trees
+```{r}
+##Construct a Classification Tree
+
+ClassificationTree<- train(
+  classe ~ ., 
+  data=Training,
+  method='rpart',
+  tuneLength = 10,
+  trControl = trainControl (method = "cv")
+)
+ClassificationTree
+summary(ClassificationTree)
+
+
+
+
+
+```
+
+
+Applying the Classification Tree Model
+The model is run against the validation data set to gebnerate preidctions and to assess the quality of those predictions.
+```{r}
+PredictionTree <- predict(ClassificationTree, Validation)
+ConfusionMatrixTree <- confusionMatrix (PredictionTree, factor(Validation$classe))
+ConfusionMatrixTree
+
+```
+Analysis of Classification Tree Model
+The output of train() yields a table providing the accuracy and kappa for ten iterations of the Classification Tree Model. Accuracy is the observed percentage of accurate predictions of the target value, and kappa is the expected percentage, the percentage if values were randomly determined, of accurate predictions. Since the best output has an accuracy of approximately 71% and a kappa of approximately 63%, the model does not yield much value added.
+
+Since the p-value of accuracy in relation to the NIR(No Information Rate) is less than, 0.01, we can conclude that the model is statistically better than one always predicting the majority class.
+
+Random Forest
+```{r}
+RandomForest <- train (classe~.,data = Training, method = "rf", trControl = Control, tuneLength = 5) 
+PredictionRandomForest <- predict(RandomForest, Validation)
+ConfusionMatrixRandomForest<- confusionMatrix (PredictionRandomForest, factor(Validation$classe))
+ConfusionMatrixRandomForest
+  
+```
+
+PredictionRandomForest <- predict(RandomForest, pml_testing)
+
+PredictionRandomForest
+
+
+
+
+
+
+<center>Outcome</center>
+Executing the Random Forest Model against the test data yielded 100% correspondence between the predicted and the observed outcomes.
+
+
